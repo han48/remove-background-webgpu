@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sabitech demo background removal</title>
+  <script type="module" crossorigin src="worker.js"></script>
+  <script type="module" src="index.js"></script>
+  <link rel="stylesheet" crossorigin href="index.css">
+</head>
+
+<body>
+  <h1>Sabitech demo background removal</h1>
+  <div id="container">
+    <label id="upload-button" for="upload">
+      Click to upload image
+      <label id="example">(or try example)</label>
+    </label>
+  </div>
+  <label id="status"></label>
+  <div id="clipboard-wrapper">
+    <canvas id="paste-canvas"></canvas>
+  </div>
+  <input id="upload" type="file" accept="image/*" />
+
+</body>
+
+</html>
