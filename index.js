@@ -15,7 +15,9 @@ const statusElement = document.getElementById("status");
 const fileInputElement = document.getElementById("upload");
 const imageContainerElement = document.getElementById("container");
 const pasteCanvas = document.getElementById("paste-canvas");
-const exampleButton = document.getElementById("example");
+const resetButton = document.getElementById("reset-button");
+const uploadButtonHtml = imageContainerElement.innerHTML;
+const exampleButtonSelector = "#example";
 
 let pasteImage = null;
 let pastePosition = { x: 0, y: 0 };
@@ -143,7 +145,9 @@ await backgroundRemovalModel({
 });
 statusElement.textContent = "Ready";
 
-exampleButton.addEventListener("click", event => {
+imageContainerElement.addEventListener("click", event => {
+  const target = event.target.closest(exampleButtonSelector);
+  if (!target) return;
   event.preventDefault();
   runBackgroundRemoval(DEFAULT_IMAGE_URL);
 });
@@ -155,6 +159,18 @@ fileInputElement.addEventListener("change", function (event) {
   const reader = new FileReader();
   reader.onload = loadEvent => runBackgroundRemoval(loadEvent.target.result);
   reader.readAsDataURL(file);
+});
+
+resetButton.addEventListener("click", () => {
+  fileInputElement.value = "";
+  imageContainerElement.innerHTML = uploadButtonHtml;
+  imageContainerElement.style.removeProperty("background-image");
+  imageContainerElement.style.removeProperty("background");
+  imageContainerElement.style.removeProperty("width");
+  imageContainerElement.style.removeProperty("height");
+  pasteImage = null;
+  drawPasteCanvas();
+  statusElement.textContent = "Select a new image to continue.";
 });
 
 async function runBackgroundRemoval(imageSource) {

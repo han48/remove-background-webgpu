@@ -131,6 +131,22 @@ canvas {
     cursor: grabbing;
 }
 
+#reset-button {
+    margin-top: 1rem;
+    padding: 0.75rem 1rem;
+    border: 1px solid #9ca3af;
+    border-radius: 999px;
+    background: transparent;
+    color: #fff;
+    cursor: pointer;
+    transition: background 0.2s ease, border-color 0.2s ease;
+}
+
+#reset-button:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: #fff;
+}
+
 #status {
     min-height: 16px;
     margin: 8px 0
