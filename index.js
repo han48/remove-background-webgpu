@@ -1,3 +1,7 @@
+const queryString = window.location.search;
+const urlParams = new URLSearchParams(queryString);
+var useWebGPU = urlParams.get('webgpu') !== '0';
+
 const { AutoModel, AutoProcessor, RawImage, Tensor, env } = window.HF;
 
 if (!navigator.gpu) {
@@ -8,7 +12,7 @@ if (!navigator.gpu) {
 env.backends.onnx.wasm.proxy = true;
 env.backends.onnx.wasm.wasmPaths = "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.17.1/dist/";
 env.backends.onnx.wasm.numThreads = 1;
-env.experimental.useWebGPU = true;
+env.experimental.useWebGPU = useWebGPU;
 
 const DEFAULT_IMAGE_URL = "hikari.jpeg";
 const statusElement = document.getElementById("status");
