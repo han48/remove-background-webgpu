@@ -22,6 +22,7 @@ const pasteCanvas = document.getElementById("paste-canvas");
 const resetButton = document.getElementById("reset-button");
 const selectAreaButton = document.getElementById("select-area-button");
 const selectCanvas = document.getElementById("select-canvas");
+const colorPicker = document.getElementById("color-picker");
 const selectCtx = selectCanvas.getContext("2d");
 const uploadButtonHtml = imageContainerElement.innerHTML;
 const exampleButtonSelector = "#example";
@@ -46,7 +47,7 @@ function drawPasteCanvas() {
   }
 
   pasteCtx.clearRect(0, 0, pasteCanvas.width, pasteCanvas.height);
-  pasteCtx.fillStyle = "#000";
+  pasteCtx.fillStyle = colorPicker.value;
   pasteCtx.fillRect(0, 0, pasteCanvas.width, pasteCanvas.height);
 
   const imageRatio = pasteImage.width / pasteImage.height;
@@ -228,6 +229,10 @@ selectCanvas.addEventListener("pointermove", event => {
   selectRect.endX = (event.clientX - rect.left) * scaleX;
   selectRect.endY = (event.clientY - rect.top) * scaleY;
   drawSelectRect();
+});
+
+colorPicker.addEventListener("change", function(event) {
+  drawPasteCanvas();
 });
 
 selectCanvas.addEventListener("pointerup", async event => {
