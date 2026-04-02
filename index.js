@@ -16,12 +16,22 @@ const fileInputElement = document.getElementById("upload");
 const imageContainerElement = document.getElementById("container");
 const pasteCanvas = document.getElementById("paste-canvas");
 const resetButton = document.getElementById("reset-button");
+const selectAreaButton = document.getElementById("select-area-button");
+const selectCanvas = document.getElementById("select-canvas");
+const selectCtx = selectCanvas.getContext("2d");
 const uploadButtonHtml = imageContainerElement.innerHTML;
 const exampleButtonSelector = "#example";
 
 let pasteImage = null;
 let pastePosition = { x: 0, y: 0 };
 let pasteDrag = { active: false, startX: 0, startY: 0, imageX: 0, imageY: 0 };
+let rawImage = null;
+let currentImageSource = null;
+let isSelectingArea = false;
+let selectRectActive = false;
+let selectRect = { startX: 0, startY: 0, endX: 0, endY: 0 };
+let displayWidth = 0;
+let displayHeight = 0;
 
 const pasteCtx = pasteCanvas.getContext("2d");
 
@@ -164,43 +174,207 @@ fileInputElement.addEventListener("change", function (event) {
 resetButton.addEventListener("click", () => {
   fileInputElement.value = "";
   imageContainerElement.innerHTML = uploadButtonHtml;
+  imageContainerElement.appendChild(selectCanvas); // giữ select canvas khi reset
   imageContainerElement.style.removeProperty("background-image");
   imageContainerElement.style.removeProperty("background");
   imageContainerElement.style.removeProperty("width");
   imageContainerElement.style.removeProperty("height");
   pasteImage = null;
+  rawImage = null;
+  isSelectingArea = false;
+  selectRectActive = false;
+  selectRect = { startX: 0, startY: 0, endX: 0, endY: 0 };
+  displayWidth = 0;
+  displayHeight = 0;
+  selectCanvas.style.display = "none";
+  selectCtx.clearRect(0, 0, selectCanvas.width, selectCanvas.height);
   drawPasteCanvas();
   statusElement.textContent = "Select a new image to continue.";
 });
 
-async function runBackgroundRemoval(imageSource) {
-  const rawImage = await RawImage.fromURL(imageSource);
+selectAreaButton.addEventListener("click", () => {
+  if (!rawImage) {
+    alert("Please upload an image first.");
+    return;
+  }
+  isSelectingArea = true;
+  selectCanvas.style.display = "block";
+  selectCanvas.style.pointerEvents = "auto";
+  statusElement.textContent = "Select an area by dragging the mouse.";
+});
 
-  imageContainerElement.innerHTML = "";
-  imageContainerElement.style.backgroundImage = `url(${imageSource})`;
+selectCanvas.addEventListener("pointerdown", event => {
+  if (!isSelectingArea) return;
+  const rect = selectCanvas.getBoundingClientRect();
+  const scaleX = selectCanvas.width / rect.width;
+  const scaleY = selectCanvas.height / rect.height;
+  selectRect.startX = (event.clientX - rect.left) * scaleX;
+  selectRect.startY = (event.clientY - rect.top) * scaleY;
+  selectRect.endX = selectRect.startX;
+  selectRect.endY = selectRect.startY;
+  selectRectActive = true;
+  selectCanvas.setPointerCapture(event.pointerId);
+});
 
-  const aspectRatio = rawImage.width / rawImage.height;
-  const [displayWidth, displayHeight] = aspectRatio > 720 / 480 ? [720, 720 / aspectRatio] : [480 * aspectRatio, 480];
-  imageContainerElement.style.width = `${displayWidth}px`;
-  imageContainerElement.style.height = `${displayHeight}px`;
-  statusElement.textContent = "Analysing...";
+selectCanvas.addEventListener("pointermove", event => {
+  if (!isSelectingArea || !selectRectActive) return;
+  const rect = selectCanvas.getBoundingClientRect();
+  const scaleX = selectCanvas.width / rect.width;
+  const scaleY = selectCanvas.height / rect.height;
+  selectRect.endX = (event.clientX - rect.left) * scaleX;
+  selectRect.endY = (event.clientY - rect.top) * scaleY;
+  drawSelectRect();
+});
 
-  const { pixel_values: pixelValues } = await imageProcessor(rawImage);
+selectCanvas.addEventListener("pointerup", async event => {
+  if (!isSelectingArea) return;
+  selectCanvas.releasePointerCapture(event.pointerId);
+  isSelectingArea = false;
+  selectRectActive = false;
+  selectCanvas.style.display = "none";
+  selectCanvas.style.pointerEvents = "none";
+  selectCtx.clearRect(0, 0, selectCanvas.width, selectCanvas.height);
+  await processSelectedArea();
+});
+
+function drawSelectRect() {
+  selectCtx.clearRect(0, 0, selectCanvas.width, selectCanvas.height);
+  selectCtx.strokeStyle = "#ff0000";
+  selectCtx.lineWidth = 2;
+  selectCtx.setLineDash([5, 5]);
+  selectCtx.strokeRect(
+    Math.min(selectRect.startX, selectRect.endX),
+    Math.min(selectRect.startY, selectRect.endY),
+    Math.abs(selectRect.endX - selectRect.startX),
+    Math.abs(selectRect.endY - selectRect.startY)
+  );
+}
+
+async function processSelectedArea() {
+  const scaleX = displayWidth / rawImage.width;
+  const scaleY = displayHeight / rawImage.height;
+
+  const cropX = Math.min(selectRect.startX, selectRect.endX) / scaleX;
+  const cropY = Math.min(selectRect.startY, selectRect.endY) / scaleY;
+  const cropWidth = Math.abs(selectRect.endX - selectRect.startX) / scaleX;
+  const cropHeight = Math.abs(selectRect.endY - selectRect.startY) / scaleY;
+
+  if (cropWidth < 1 || cropHeight < 1) {
+    statusElement.textContent = "Selected area too small.";
+    return;
+  }
+
+  // Clamp and round to integer coords for RawImage.crop ([left, top, right, bottom])
+  const left = Math.max(0, Math.round(cropX));
+  const top = Math.max(0, Math.round(cropY));
+  const right = Math.min(rawImage.width - 1, Math.round(cropX + cropWidth - 1));
+  const bottom = Math.min(rawImage.height - 1, Math.round(cropY + cropHeight - 1));
+
+  if (right <= left || bottom <= top) {
+    statusElement.textContent = "Selected area too small or invalid.";
+    return;
+  }
+
+  // Crop the rawImage with the correct argument format
+  const croppedImage = await rawImage.crop([left, top, right, bottom]);
+
+  statusElement.textContent = "Processing selected area...";
+
+  // Process the cropped image
+  const { pixel_values: pixelValues } = await imageProcessor(croppedImage);
   const inferenceStartTime = performance.now();
   const { output: modelOutput } = await backgroundRemovalModel({
     input: pixelValues
   });
   const inferenceEndTime = performance.now();
 
-  const maskImage = await RawImage.fromTensor(modelOutput[0].mul(255).to("uint8")).resize(rawImage.width, rawImage.height);
+  const maskImage = await RawImage.fromTensor(modelOutput[0].mul(255).to("uint8")).resize(croppedImage.width, croppedImage.height);
+
+  // Create result canvas for cropped area
   const resultCanvas = document.createElement("canvas");
-  resultCanvas.width = rawImage.width;
-  resultCanvas.height = rawImage.height;
+  resultCanvas.width = croppedImage.width;
+  resultCanvas.height = croppedImage.height;
 
   const canvasContext = resultCanvas.getContext("2d");
-  canvasContext.drawImage(rawImage.toCanvas(), 0, 0);
+  canvasContext.drawImage(croppedImage.toCanvas(), 0, 0);
 
-  const imageData = canvasContext.getImageData(0, 0, rawImage.width, rawImage.height);
+  const imageData = canvasContext.getImageData(0, 0, croppedImage.width, croppedImage.height);
+  for (let pixelIndex = 0; pixelIndex < maskImage.data.length; ++pixelIndex) {
+    imageData.data[4 * pixelIndex + 3] = maskImage.data[pixelIndex];
+  }
+
+  canvasContext.putImageData(imageData, 0, 0);
+
+  // Không ghi đè ảnh crop lên container đang chọn; chỉ cập nhật paste canvas
+  imageContainerElement.style.backgroundImage = currentImageSource ? `url(${currentImageSource})` : imageContainerElement.style.backgroundImage;
+  imageContainerElement.style.backgroundSize = "100% 100%";
+  imageContainerElement.style.backgroundPosition = "center";
+
+  // show result in paste-canvas (giữ canvas hiển thị đúng ratio)
+  pasteCanvas.width = pasteCanvas.clientWidth;
+  pasteCanvas.height = pasteCanvas.clientHeight;
+  pasteImage = new Image();
+  pasteImage.src = resultCanvas.toDataURL("image/png");
+  pastePosition = { x: 0, y: 0 };
+  pasteImage.onload = () => {
+    drawPasteCanvas();
+  };
+
+  await copyCanvasToClipboard(resultCanvas);
+  statusElement.textContent = `Done! (Inference took ${Math.round(inferenceEndTime - inferenceStartTime)}ms)`;
+}
+
+async function runBackgroundRemoval(imageSource) {
+  const localRawImage = await RawImage.fromURL(imageSource);
+
+  // Giữ selectCanvas (và #upload-button nếu còn) – chỉ reset image cũ
+  const oldResult = imageContainerElement.querySelector("canvas.result-canvas");
+  if (oldResult) oldResult.remove();
+  const uploadButton = imageContainerElement.querySelector("#upload-button");
+  if (uploadButton) uploadButton.remove();
+
+  currentImageSource = imageSource;
+  imageContainerElement.style.backgroundImage = `url(${currentImageSource})`;
+  imageContainerElement.style.backgroundSize = "100% 100%";
+  imageContainerElement.style.backgroundPosition = "center";
+
+  const aspectRatio = localRawImage.width / localRawImage.height;
+  let newDisplayWidth, newDisplayHeight;
+  if (aspectRatio > 720 / 480) {
+    newDisplayWidth = 720;
+    newDisplayHeight = 720 / aspectRatio;
+  } else {
+    newDisplayWidth = 480 * aspectRatio;
+    newDisplayHeight = 480;
+  }
+  imageContainerElement.style.width = `${newDisplayWidth}px`;
+  imageContainerElement.style.height = `${newDisplayHeight}px`;
+  statusElement.textContent = "Analysing...";
+
+  // Store for select area
+  rawImage = localRawImage;
+  displayWidth = newDisplayWidth;
+  displayHeight = newDisplayHeight;
+  selectCanvas.width = displayWidth;
+  selectCanvas.height = displayHeight;
+
+  const { pixel_values: pixelValues } = await imageProcessor(localRawImage);
+  const inferenceStartTime = performance.now();
+  const { output: modelOutput } = await backgroundRemovalModel({
+    input: pixelValues
+  });
+  const inferenceEndTime = performance.now();
+
+  const maskImage = await RawImage.fromTensor(modelOutput[0].mul(255).to("uint8")).resize(localRawImage.width, localRawImage.height);
+  const resultCanvas = document.createElement("canvas");
+  resultCanvas.className = "result-canvas";
+  resultCanvas.width = localRawImage.width;
+  resultCanvas.height = localRawImage.height;
+
+  const canvasContext = resultCanvas.getContext("2d");
+  canvasContext.drawImage(localRawImage.toCanvas(), 0, 0);
+
+  const imageData = canvasContext.getImageData(0, 0, localRawImage.width, localRawImage.height);
   for (let pixelIndex = 0; pixelIndex < maskImage.data.length; ++pixelIndex) {
     imageData.data[4 * pixelIndex + 3] = maskImage.data[pixelIndex];
   }

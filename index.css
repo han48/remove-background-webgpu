@@ -127,11 +127,32 @@ canvas {
     cursor: grabbing;
 }
 
+#select-canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none;
+    display: none;
+    cursor: crosshair;
+    z-index: 20;
+}
+
+#container canvas.result-canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 10;
+}
+
 #paste-canvas.dragging {
     cursor: grabbing;
 }
 
-#reset-button {
+#reset-button, #select-area-button {
     margin-top: 1rem;
     padding: 0.75rem 1rem;
     border: 1px solid #9ca3af;
@@ -142,7 +163,7 @@ canvas {
     transition: background 0.2s ease, border-color 0.2s ease;
 }
 
-#reset-button:hover {
+#reset-button:hover, #select-area-button:hover {
     background: rgba(255, 255, 255, 0.08);
     border-color: #fff;
 }
