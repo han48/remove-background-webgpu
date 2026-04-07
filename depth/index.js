@@ -11183,7 +11183,7 @@ ${ee}_indices[${Re}] = 0;`
                 input_offset++;
               }
               ${I ? "workgroup_shared[workgroup_shared_offset + m]" : "output_values[m]"}${A > 1 ? "[c]" : ""} += ${Array.from({ length: 8 / b }, (Ke, Le) => `
-        $ {
+        ${
             b === 1 ? `a_data[${ Le }] * b_dequantized_values[${ Le }]` : `dot(a_data[${ Le }], b_dequantized_values[${ Le }])`
         }
         `).join(" + ")};
